@@ -12,7 +12,6 @@ pub use smol;
 use serde_json::Value;
 
 pub mod rpc;
-pub mod payloads;
 
 pub struct Omegga {
     channels_ref: Arc<Mutex<HashMap<rpc::RequestId, Sender<Result<Value, RpcError>>>>>,
