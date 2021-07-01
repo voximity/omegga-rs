@@ -1,3 +1,4 @@
+use rpc::RequestId;
 use smol::lock::MutexGuard;
 
 use {
@@ -23,24 +24,20 @@ pub struct OmeggaWrapper {
     omegga: Arc<Mutex<Omegga>>,
 
     // receive and respond to events from the user's side
-    pub stream_receiver: Arc<Receiver<RpcMessage>>,
-    pub stream_sender: Arc<Sender<RpcMessage>>,
+    pub stream: Arc<Receiver<RpcMessage>>,
 
     // internal stream parts
-    int_stream_sender: Arc<Sender<RpcMessage>>,
-    int_stream_receiver: Arc<Receiver<RpcMessage>>
+    int_stream_sender: Arc<Sender<RpcMessage>>
 }
 
 impl OmeggaWrapper {
     pub fn new() -> Self {
         // stream to user, response from user
         let (int_stream_sender, stream_receiver) = channel::unbounded();
-        let (stream_sender, int_stream_receiver) = channel::unbounded();
 
         OmeggaWrapper {
             omegga: Arc::new(Mutex::new(Omegga::new())),
-            stream_receiver: Arc::new(stream_receiver), stream_sender: Arc::new(stream_sender),
-            int_stream_sender: Arc::new(int_stream_sender), int_stream_receiver: Arc::new(int_stream_receiver)
+            stream: Arc::new(stream_receiver), int_stream_sender: Arc::new(int_stream_sender)
         }
     }
 
@@ -54,14 +51,6 @@ impl OmeggaWrapper {
 
     pub fn start(&mut self) {
         smol::block_on(async {
-            // start loop to listen for incoming responses
-            let receiver_locked = self.int_stream_receiver.clone();
-            smol::spawn(async move {
-                while let Ok(message) = receiver_locked.recv().await {
-                    println!("{}", serde_json::to_string(&message).expect("Failed to respond with RpcMessage"));
-                }
-            }).detach();
-
             let reader = io::BufReader::new(Unblock::new(std::io::stdin()));
             let mut lines = reader.lines();
 
@@ -111,11 +100,26 @@ impl Omegga {
         Omegga { channels_ref: Arc::new(Mutex::new(HashMap::new())), last_id: 0 }
     }
 
+    /// Notify Omegga, given a method and some parameter.
     pub fn notify(method: &str, params: Value) {
-        println!("{}", serde_json::to_string(&RpcMessage::notification(method.into(), params)).unwrap());
+        println!("{}", serde_json::to_string(&RpcMessage::notification(method.into(), Some(params))).unwrap());
     }
 
-    pub async fn request(mutex: Arc<Mutex<Self>>, method: &str, params: Value) -> ResponseAwaiter {
+    /// Notify Omegga with no parameter.
+    pub fn tell(method: &str) {
+        println!("{}", serde_json::to_string(&RpcMessage::notification(method.into(), None)).unwrap());
+    }
+
+    pub fn respond(id: RequestId, body: Result<Value, RpcError>) {
+        let response = match body {
+            Ok(value) => RpcMessage::response(id, Some(value), None),
+            Err(err) => RpcMessage::response(id, None, Some(err))
+        };
+
+        println!("{}", serde_json::to_string(&response).unwrap());
+    }
+
+    pub async fn request(mutex: Arc<Mutex<Self>>, method: &str, params: Option<Value>) -> ResponseAwaiter {
         let local_self = &mut mutex.lock().await;
 
         local_self.last_id -= 1;

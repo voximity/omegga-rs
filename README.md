@@ -27,7 +27,7 @@ fn main() {
                 RpcMessage::Notification { method, params, .. } => {
                     match method.as_str() {
                         "chatcmd:test" => {
-                            let user = (&params[0]).as_str().unwrap(); // get the runner's username
+                            let user = (&params.unwrap()[0]).as_str().unwrap(); // get the runner's username
                             Omegga::notify("broadcast", json!(format!("You ran the test command, {}", user)));
                         },
                         _ => ()

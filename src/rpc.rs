@@ -18,13 +18,13 @@ pub enum RequestId {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum RpcMessage {
-    Request { jsonrpc: String, id: RequestId, method: String, params: Value },
+    Request { jsonrpc: String, id: RequestId, method: String, params: Option<Value> },
     Response { jsonrpc: String, id: RequestId, result: Option<Value>, error: Option<RpcError> },
-    Notification { jsonrpc: String, method: String, params: Value }
+    Notification { jsonrpc: String, method: String, params: Option<Value> }
 }
 
 impl RpcMessage {
-    pub fn request(id: RequestId, method: String, params: Value) -> RpcMessage {
+    pub fn request(id: RequestId, method: String, params: Option<Value>) -> RpcMessage {
         RpcMessage::Request { jsonrpc: String::from("2.0"), id, method, params }
     }
 
@@ -32,7 +32,7 @@ impl RpcMessage {
         RpcMessage::Response { jsonrpc: String::from("2.0"), id, result, error }
     }
 
-    pub fn notification(method: String, params: Value) -> RpcMessage {
+    pub fn notification(method: String, params: Option<Value>) -> RpcMessage {
         RpcMessage::Notification { jsonrpc: String::from("2.0"), method, params }
     }
 }
