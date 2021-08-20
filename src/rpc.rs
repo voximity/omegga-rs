@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// An RPC error, as defined in the RPC specification.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Error {
     code: i32,
     message: String,
@@ -12,7 +12,7 @@ pub struct Error {
 }
 
 /// An RPC request ID. Can be a string (`Str`) or an integer (`Int`).
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 #[serde(untagged)]
 pub enum RequestId {
     Str(String),
@@ -32,7 +32,7 @@ impl From<i32> for RequestId {
 }
 
 /// An RPC message. One of [`Request`, `Response`, `Notification`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Message {
     Request {
@@ -85,6 +85,7 @@ impl Message {
 /// A struct that contains the same data as `Message::Response`.
 /// Used to save redundant `match`es against a `Message` that is
 /// known to be a `Message::Response`.
+#[derive(Debug, Clone)]
 pub struct Response {
     pub id: RequestId,
     pub result: Option<Value>,

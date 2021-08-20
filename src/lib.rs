@@ -5,6 +5,7 @@ use std::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
+    task::{Context, Poll},
 };
 
 use dashmap::{mapref::entry::Entry, DashMap};
@@ -134,12 +135,36 @@ impl Default for Omegga {
 pub struct ResponseAwaiter(oneshot::Receiver<rpc::Response>);
 
 impl Future for ResponseAwaiter {
-    type Output = Result<rpc::Response, oneshot::error::RecvError>;
+    type Output = Response;
 
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        Pin::new(&mut self.0).poll(cx)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match Pin::new(&mut self.0).poll(cx) {
+            // we received a response, filter between a real result or an RPC error
+            Poll::Ready(Ok(response)) => Poll::Ready(match response.error {
+                Some(e) => Response::RpcError(e),
+                None => Response::Ok(response.result),
+            }),
+
+            // no response received, the channel errored
+            Poll::Ready(Err(error)) => Poll::Ready(Response::RecvError(error)),
+
+            // we are still waiting
+            Poll::Pending => Poll::Pending,
+        }
     }
+}
+
+/// A response from Omegga's RPC server. Can be an optional value,
+/// an RPC error (see [`rpc::Error`](rpc::Error)), or a channel
+/// receive error (see [`oneshot::error::RecvError`](oneshot::error::RecvError))
+#[derive(Debug)]
+pub enum Response {
+    /// The response succeeded and did not give an error.
+    Ok(Option<Value>),
+
+    /// The response was received but gave an error.
+    RpcError(rpc::Error),
+
+    /// An error occurred while awaiting the awaiter's channel.
+    RecvError(oneshot::error::RecvError),
 }
