@@ -1,10 +1,10 @@
 use std::{
     future::Future,
+    pin::Pin,
     sync::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    task::Poll,
 };
 
 use dashmap::{mapref::entry::Entry, DashMap};
@@ -134,16 +134,12 @@ impl Default for Omegga {
 pub struct ResponseAwaiter(oneshot::Receiver<rpc::Response>);
 
 impl Future for ResponseAwaiter {
-    type Output = Result<rpc::Response, ()>;
+    type Output = Result<rpc::Response, oneshot::error::RecvError>;
 
     fn poll(
         mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        match self.0.try_recv() {
-            Ok(value) => Poll::Ready(Ok(value)),
-            Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
-            Err(oneshot::error::TryRecvError::Closed) => Poll::Ready(Err(())),
-        }
+        Pin::new(&mut self.0).poll(cx)
     }
 }
