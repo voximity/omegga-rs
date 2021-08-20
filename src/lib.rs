@@ -1,195 +1,149 @@
-use rpc::RequestId;
-use smol::lock::MutexGuard;
-
-use {
-    rpc::{RpcError, RpcMessage},
-    smol::{
-        channel::{self, Receiver, Sender},
-        future::FutureExt,
-        io::{self, AsyncBufReadExt},
-        lock::Mutex,
-        stream::StreamExt,
-        Timer, Unblock,
+use std::{
+    future::Future,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
     },
-    std::{collections::HashMap, sync::Arc, time::Duration},
+    task::Poll,
 };
 
-pub use serde_json;
-pub use smol;
-
+use dashmap::{mapref::entry::Entry, DashMap};
 use serde_json::Value;
+use tokio::{
+    io::{stdin, AsyncBufReadExt, BufReader},
+    sync::{
+        mpsc::{self, UnboundedReceiver},
+        oneshot,
+    },
+};
 
 pub mod rpc;
 
+pub type RpcEventReceiver = UnboundedReceiver<rpc::Message>;
+
 pub struct Omegga {
-    channels_ref: Arc<Mutex<HashMap<rpc::RequestId, Sender<Result<Value, Option<RpcError>>>>>>,
-
-    last_id: i32,
-}
-
-pub struct OmeggaWrapper {
-    omegga: Arc<Mutex<Omegga>>,
-
-    // receive and respond to events from the user's side
-    pub stream: Arc<Receiver<RpcMessage>>,
-
-    // internal stream parts
-    int_stream_sender: Arc<Sender<RpcMessage>>,
-}
-
-impl OmeggaWrapper {
-    pub fn new() -> Self {
-        // stream to user, response from user
-        let (int_stream_sender, stream_receiver) = channel::unbounded();
-
-        OmeggaWrapper {
-            omegga: Arc::new(Mutex::new(Omegga::new())),
-            stream: Arc::new(stream_receiver),
-            int_stream_sender: Arc::new(int_stream_sender),
-        }
-    }
-
-    pub async fn inner(&self) -> MutexGuard<'_, Omegga> {
-        self.omegga.lock().await
-    }
-
-    pub fn clone_inner(&self) -> Arc<Mutex<Omegga>> {
-        self.omegga.clone()
-    }
-
-    pub fn start(&mut self) {
-        smol::block_on(async {
-            let reader = io::BufReader::new(Unblock::new(std::io::stdin()));
-            let mut lines = reader.lines();
-
-            while let Some(line) = lines.next().await {
-                let string = line.expect("Unable to fetch from stdin");
-
-                // parse into an RpcMessage
-                let message: RpcMessage = match serde_json::from_str(string.as_str()) {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                };
-
-                // match the message and let the handlers know
-                // in a new worker
-                let self_locked = self.omegga.lock_arc().await;
-                let sender_locked = self.int_stream_sender.clone();
-                let channels = self_locked.channels_ref.clone();
-                smol::spawn(async move {
-                    match message {
-                        RpcMessage::Response {
-                            id, result, error, ..
-                        } => {
-                            let channels = &mut channels.lock().await;
-                            match channels.get(&id) {
-                                Some(sender) => {
-                                    let res =
-                                        match result {
-                                            Some(value) => Ok(value),
-                                            None => Err(error),
-                                        };
-
-                                    // at this point, send the result over the sender
-                                    // we can also remove this entry from the hashtable
-                                    sender.send(res).await.unwrap();
-                                    channels.remove(&id);
-                                }
-                                None => (),
-                            }
-                        }
-                        _ => sender_locked.send(message).await.unwrap(),
-                    }
-                })
-                .detach();
-            }
-        });
-    }
+    pub awaiter_txs: Arc<DashMap<rpc::RequestId, oneshot::Sender<rpc::Response>>>,
+    request_id: Arc<AtomicI32>,
 }
 
 impl Omegga {
+    /// Create a new Omegga instance.
     pub fn new() -> Self {
-        Omegga {
-            channels_ref: Arc::new(Mutex::new(HashMap::new())),
-            last_id: 0,
+        Self {
+            awaiter_txs: Arc::new(DashMap::new()),
+            request_id: Arc::new(AtomicI32::new(-1)),
         }
     }
 
-    /// Notify Omegga, given a method and some parameter.
-    pub fn notify(method: &str, params: Value) {
-        println!(
-            "{}",
-            serde_json::to_string(&RpcMessage::notification(method.into(), Some(params))).unwrap()
-        );
+    /// Spawn the listener.
+    pub fn spawn(&self) -> RpcEventReceiver {
+        let (tx, rx) = mpsc::unbounded_channel::<rpc::Message>();
+        let awaiter_txs = Arc::clone(&self.awaiter_txs);
+        tokio::spawn(async move {
+            let reader = BufReader::new(stdin());
+            let mut lines = reader.lines();
+            while let Some(line) = lines.next_line().await.unwrap() {
+                let message: rpc::Message = match serde_json::from_str(&line) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                match message {
+                    // Handle responses
+                    rpc::Message::Response {
+                        id, result, error, ..
+                    } => {
+                        if let Entry::Occupied(entry) = awaiter_txs.entry(id) {
+                            let (id, sender) = entry.remove_entry();
+                            let _ = sender.send(rpc::Response { id, result, error });
+                        }
+                    }
+                    // Otherwise, send everything else
+                    _ => {
+                        let _ = tx.send(message);
+                    }
+                };
+            }
+        });
+        rx
     }
 
-    /// Notify Omegga with no parameter.
-    pub fn tell(method: &str) {
-        println!(
-            "{}",
-            serde_json::to_string(&RpcMessage::notification(method.into(), None)).unwrap()
-        );
+    /// Write out an RPC message.
+    pub fn write(&self, message: rpc::Message) {
+        println!("{}", serde_json::to_string(&message).unwrap());
     }
 
-    pub fn respond(id: RequestId, body: Result<Value, RpcError>) {
-        let response = match body {
-            Ok(value) => RpcMessage::response(id, Some(value), None),
-            Err(err) => RpcMessage::response(id, None, Some(err)),
-        };
-
-        println!("{}", serde_json::to_string(&response).unwrap());
+    /// Write out an RPC notification.
+    pub fn write_notification(&self, method: impl Into<String>, params: Option<Value>) {
+        self.write(rpc::Message::notification(method.into(), params));
     }
 
-    pub async fn request(
-        mutex: Arc<Mutex<Self>>,
-        method: &str,
+    /// Write out an RPC response.
+    pub fn write_response(
+        &self,
+        id: rpc::RequestId,
         params: Option<Value>,
-    ) -> ResponseAwaiter {
-        let local_self = &mut mutex.lock().await;
+        error: Option<rpc::Error>,
+    ) {
+        self.write(rpc::Message::response(id, params, error));
+    }
 
-        local_self.last_id -= 1;
-        let request = RpcMessage::request(
-            local_self.last_id.into(),
-            String::from(method),
-            params,
-        );
-        println!("{}", serde_json::to_string(&request).unwrap());
+    /// Write out an RPC request.
+    ///
+    /// **Note:** This does not internally expect a response from the server.
+    /// Prefer using [`request`](Omegga::request) over this for the ability to
+    /// await a response from the RPC server.
+    pub fn write_request(
+        &self,
+        id: rpc::RequestId,
+        method: impl Into<String>,
+        params: Option<Value>,
+    ) {
+        self.write(rpc::Message::request(id, method.into(), params));
+    }
 
-        let (rx, tx) = channel::bounded::<Result<Value, Option<RpcError>>>(1);
-        let channels = Arc::clone(&local_self.channels_ref);
+    /// Request a response from the RPC server.
+    /// This returns a `ResponseAwaiter`, a `Future` that awaits a response.
+    pub fn request(&self, method: impl Into<String>, params: Option<Value>) -> ResponseAwaiter {
+        // fetch the next ID
+        let id = self.request_id.fetch_sub(-1, Ordering::SeqCst);
 
-        {
-            let mut mtx = channels.lock().await;
-            mtx.insert(rpc::RequestId::Int(local_self.last_id), rx);
+        // write out the request
+        self.write_request(rpc::RequestId::Int(id), method, params);
+
+        // create a channel to send the response over
+        let (tx, rx) = oneshot::channel::<rpc::Response>();
+
+        // insert the transmitter into the dashmap
+        self.awaiter_txs.insert(rpc::RequestId::Int(id), tx);
+
+        // return back with an awaiter to await the receiver
+        ResponseAwaiter(rx)
+    }
+}
+
+impl Default for Omegga {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A future that waits for the server to respond.
+/// This will await indefinitely, so use with Tokio's `select!`
+/// macro to impose a timeout.
+pub struct ResponseAwaiter(oneshot::Receiver<rpc::Response>);
+
+impl Future for ResponseAwaiter {
+    type Output = Result<rpc::Response, ()>;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match self.0.try_recv() {
+            Ok(value) => Poll::Ready(Ok(value)),
+            Err(oneshot::error::TryRecvError::Empty) => Poll::Pending,
+            Err(oneshot::error::TryRecvError::Closed) => Poll::Ready(Err(())),
         }
-
-        ResponseAwaiter::new(tx)
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ResponseReceiveError {
-    #[error("channel receive error")]
-    Recv(#[from] smol::channel::RecvError),
-    #[error("timed out")]
-    Timeout,
-}
-
-pub struct ResponseAwaiter {
-    receiver: Receiver<Result<Value, Option<RpcError>>>,
-}
-
-impl ResponseAwaiter {
-    pub fn new(receiver: Receiver<Result<Value, Option<RpcError>>>) -> Self {
-        ResponseAwaiter { receiver }
-    }
-
-    pub async fn receive(self) -> Result<Result<Value, Option<RpcError>>, ResponseReceiveError> {
-        async move { Ok(self.receiver.recv().await?) }
-            .or(async {
-                Timer::after(Duration::from_secs(15)).await;
-                Err(ResponseReceiveError::Timeout)
-            })
-            .await
     }
 }

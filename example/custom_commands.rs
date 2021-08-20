@@ -1,3 +1,5 @@
+// Note: this example is outdated! I'm too lazy to rewrite it right now.
+
 /**
 * custom_commands
 * This sample plugin allows authorized users to create custom commands with !new-cmd <cmd-name> <content>.

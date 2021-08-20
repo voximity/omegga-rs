@@ -1,13 +1,17 @@
+use std::convert::TryFrom;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// An RPC error, as defined in the RPC specification.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RpcError {
+pub struct Error {
     code: i32,
     message: String,
     data: Option<Value>,
 }
 
+/// An RPC request ID. Can be a string (`Str`) or an integer (`Int`).
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 #[serde(untagged)]
 pub enum RequestId {
@@ -27,9 +31,10 @@ impl From<i32> for RequestId {
     }
 }
 
+/// An RPC message. One of [`Request`, `Response`, `Notification`].
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
-pub enum RpcMessage {
+pub enum Message {
     Request {
         jsonrpc: String,
         id: RequestId,
@@ -40,7 +45,7 @@ pub enum RpcMessage {
         jsonrpc: String,
         id: RequestId,
         result: Option<Value>,
-        error: Option<RpcError>,
+        error: Option<Error>,
     },
     Notification {
         jsonrpc: String,
@@ -49,9 +54,9 @@ pub enum RpcMessage {
     },
 }
 
-impl RpcMessage {
-    pub fn request(id: RequestId, method: String, params: Option<Value>) -> RpcMessage {
-        RpcMessage::Request {
+impl Message {
+    pub fn request(id: RequestId, method: String, params: Option<Value>) -> Self {
+        Message::Request {
             jsonrpc: String::from("2.0"),
             id,
             method,
@@ -59,8 +64,8 @@ impl RpcMessage {
         }
     }
 
-    pub fn response(id: RequestId, result: Option<Value>, error: Option<RpcError>) -> RpcMessage {
-        RpcMessage::Response {
+    pub fn response(id: RequestId, result: Option<Value>, error: Option<Error>) -> Self {
+        Message::Response {
             jsonrpc: String::from("2.0"),
             id,
             result,
@@ -68,11 +73,44 @@ impl RpcMessage {
         }
     }
 
-    pub fn notification(method: String, params: Option<Value>) -> RpcMessage {
-        RpcMessage::Notification {
+    pub fn notification(method: String, params: Option<Value>) -> Self {
+        Message::Notification {
             jsonrpc: String::from("2.0"),
             method,
             params,
+        }
+    }
+}
+
+/// A struct that contains the same data as `Message::Response`.
+/// Used to save redundant `match`es against a `Message` that is
+/// known to be a `Message::Response`.
+pub struct Response {
+    pub id: RequestId,
+    pub result: Option<Value>,
+    pub error: Option<Error>,
+}
+
+impl TryFrom<Message> for Response {
+    type Error = ();
+
+    fn try_from(value: Message) -> Result<Self, Self::Error> {
+        match value {
+            Message::Response {
+                id, result, error, ..
+            } => Ok(Self { id, result, error }),
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<Response> for Message {
+    fn from(value: Response) -> Self {
+        Self::Response {
+            jsonrpc: "2.0".into(),
+            id: value.id,
+            result: value.result,
+            error: value.error,
         }
     }
 }

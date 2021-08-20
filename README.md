@@ -2,59 +2,37 @@
 
 Experimental RPC interface library for Rust.
 
-This is my first project with Rust, so don't guarantee great code or good practices! Let me know if you find better ways to do stuff.
-
 ## Usage
 
 The following is a sample plugin:
 
 ```rs
-use omegga::{Omegga, OmeggaWrapper, serde_json::{self, Value, json}, smol, rpc::RpcMessage}
+use omegga::{Omegga, rpc};
+use serde_json::Value;
 
-fn main() {
-    let mut o = OmeggaWrapper::new();
+#[tokio::main]
+async fn main() {
+    let omegga = Omegga::new();
+    let mut messages = omegga.spawn();
 
-    // create a clone of the stream Arcs
-    let stream_in = o.stream_receiver.clone();
-    let stream_out = o.stream_sender.clone();
+    while let Some(message) = messages.recv().await {
+        match message {
+            rpc::Message::Request { method, id, .. } if method == "init" || method == "stop" => {
+                // just write anything so omegga knows we work
+                omegga.write_response(id, None, None);
 
-    // create a clone of the inner Omegga Arc
-    let omegga = o.clone_inner();
-
-    smol::spawn(async move {
-        while let Ok(message) = stream_in.recv().await {
-            match message {
-                RpcMessage::Notification { method, params, .. } => {
-                    match method.as_str() {
-                        "chatcmd:test" => {
-                            let user = (&params.unwrap()[0]).as_str().unwrap(); // get the runner's username
-                            Omegga::notify("broadcast", json!(format!("You ran the test command, {}", user)));
-                        },
-                        _ => ()
-                    }
-                },
-                RpcMessage::Request { id, method, params, .. } => {
-                    match method.as_str() {
-                        "init" => {
-                            // send a blank response to let omegga know we work
-                            stream_out.send(RpcMessage::response(id, Some(json!({})), None)).await.unwrap();
-
-                            // print out some text
-                            Omegga::notify("log", json!("Hello from omegga-rs!"));
-                        },
-                        "stop" => {
-                            // respond with something to imply we work
-                            stream_out.send(RpcMessage::response(id, Some(json!(0)), None)).await.unwrap();
-                        },
-                        _ => ()
-                    }
-                },
-                _ => ()
+                if method == "init" {
+                    omegga.write_notification("log", Some(Value::String("Hello from omegga-rs!".into())));
+                }
             }
+            rpc::Message::Notification { method, params, .. } if method == "chatcmd:test" => {
+                let params = params.unwrap();
+                let user = params.as_array().unwrap().first().unwrap().as_str().unwrap();
+                omegga.write_notification("broadcast", Some(Value::String(format!("You ran the test command, {}", user))));
+            }
+            _ => ()
         }
-    }).detach();
-
-    o.start();
+    }
 }
 ```
 
