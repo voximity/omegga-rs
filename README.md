@@ -8,7 +8,7 @@ To enable support for serializing/deserializing into [brickadia-rs](https://gith
 save objects, use the optional feature `brs`:
 
 ```toml
-brickadia = { version = "0.1", features = "brs" }
+brickadia = { version = "0.2", features = "brs" }
 ```
 
 The following is a sample plugin:
