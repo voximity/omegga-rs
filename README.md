@@ -4,6 +4,13 @@ Experimental RPC interface library for Rust.
 
 ## Usage
 
+To enable support for serializing/deserializing into [brickadia-rs](https://github.com/brickadia-community/brickadia-rs)
+save objects, use the optional feature `brs`:
+
+```toml
+brickadia = { version = "0.1", features = "brs" }
+```
+
 The following is a sample plugin:
 
 ```rs
