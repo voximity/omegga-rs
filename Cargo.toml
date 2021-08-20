@@ -1,6 +1,6 @@
 [package]
 name = "omegga"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2018"
 description = "Experimental RPC interface for Omegga"
 license = "ISC"
@@ -12,7 +12,7 @@ brickadia = { version = "0.1.7", optional = true }
 dashmap = "4.0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-thiserror = "1.0.25"
+thiserror = "1.0.26"
 tokio = { version = "1.10", features = ["full"] }
 
 [features]

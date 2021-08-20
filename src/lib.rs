@@ -13,7 +13,8 @@ use brickadia::save;
 
 use dashmap::{mapref::entry::Entry, DashMap};
 use resources::Player;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
+use thiserror::Error;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     sync::{
@@ -54,10 +55,13 @@ impl Future for ResponseAwaiter {
 }
 
 /// A response error. Either an RPC error (`rpc::Error`), or a receive error (`oneshot::error::RecvError`).
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ResponseError {
+    #[error("rpc error")]
     Rpc(rpc::Error),
-    Recv(oneshot::error::RecvError),
+
+    #[error("receive error")]
+    Recv(#[from] oneshot::error::RecvError),
 }
 
 pub struct Omegga {
@@ -159,7 +163,7 @@ impl Omegga {
         // return back with an awaiter to await the receiver
         ResponseAwaiter(rx)
     }
-    
+
     /// Prints a message to the Omegga console.
     pub fn log(&self, line: impl Into<String>) {
         self.write_notification("log", Some(Value::String(line.into())));
@@ -187,17 +191,26 @@ impl Omegga {
 
     /// Gets an object from the store.
     pub async fn store_get(&self, key: impl Into<String>) -> Result<Option<Value>, ResponseError> {
-        self.request("store.get", Some(Value::String(key.into()))).await
+        self.request("store.get", Some(Value::String(key.into())))
+            .await
     }
 
     /// Sets an object in the store.
-    pub async fn store_set(&self, key: impl Into<String>, value: Value) -> Result<(), ResponseError> {
-        self.request("store.set", Some(json!([key.into(), value]))).await.map(|_| ())
+    pub async fn store_set(
+        &self,
+        key: impl Into<String>,
+        value: Value,
+    ) -> Result<(), ResponseError> {
+        self.request("store.set", Some(json!([key.into(), value])))
+            .await
+            .map(|_| ())
     }
 
     /// Deletes an object from the store.
     pub async fn store_delete(&self, key: impl Into<String>) -> Result<(), ResponseError> {
-        self.request("store.delete", Some(Value::String(key.into()))).await.map(|_| ())
+        self.request("store.delete", Some(Value::String(key.into())))
+            .await
+            .map(|_| ())
     }
 
     /// Wipes the store.
@@ -225,7 +238,10 @@ impl Omegga {
 
     /// Whispers a line to a user by their name.
     pub fn whisper(&self, username: impl Into<String>, line: impl Into<String>) {
-        self.write_notification("whisper", Some(json!({"target": username.into(), "line": line.into()})));
+        self.write_notification(
+            "whisper",
+            Some(json!({"target": username.into(), "line": line.into()})),
+        );
     }
 
     /// Gets a list of all players.
@@ -237,19 +253,28 @@ impl Omegga {
     }
 
     /// Get a player's position.
-    pub async fn get_player_position(&self, target: impl Into<String>) -> Result<Option<(f64, f64, f64)>, ResponseError> {
-        self.request("getPlayerPosition", Some(Value::String(target.into()))).await.map(|r| match r {
-            Some(r) => serde_json::from_value::<(f64, f64, f64)>(r).ok(),
-            None => None
-        })
+    pub async fn get_player_position(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<(f64, f64, f64)>, ResponseError> {
+        self.request("getPlayerPosition", Some(Value::String(target.into())))
+            .await
+            .map(|r| match r {
+                Some(r) => serde_json::from_value::<(f64, f64, f64)>(r).ok(),
+                None => None,
+            })
     }
 
     /// Get all player positions.
     pub async fn get_all_player_positions(&self) -> Result<Vec<PlayerPosition>, ResponseError> {
-        self.request("getAllPlayerPositions", None).await.map(|r| match r {
-            Some(r) => serde_json::from_value::<Vec<PlayerPosition>>(r).unwrap_or_else(|_| vec![]),
-            None => vec![],
-        })
+        self.request("getAllPlayerPositions", None)
+            .await
+            .map(|r| match r {
+                Some(r) => {
+                    serde_json::from_value::<Vec<PlayerPosition>>(r).unwrap_or_else(|_| vec![])
+                }
+                None => vec![],
+            })
     }
 
     /// Get the role setup.
@@ -273,11 +298,16 @@ impl Omegga {
     }
 
     /// Get the path to a specific save.
-    pub async fn get_save_path(&self, save: impl Into<String>) -> Result<Option<String>, ResponseError> {
-        self.request("getSavePath", Some(Value::String(save.into()))).await.map(|r| match r {
-            Some(r) => serde_json::from_value::<String>(r).ok(),
-            None => None,
-        })
+    pub async fn get_save_path(
+        &self,
+        save: impl Into<String>,
+    ) -> Result<Option<String>, ResponseError> {
+        self.request("getSavePath", Some(Value::String(save.into())))
+            .await
+            .map(|r| match r {
+                Some(r) => serde_json::from_value::<String>(r).ok(),
+                None => None,
+            })
     }
 
     /// Gets the server's current save data.
@@ -289,59 +319,92 @@ impl Omegga {
     /// Gets the server's current save data as a brickadia-rs save object.
     #[cfg(feature = "brs")]
     pub async fn get_save_data(&self) -> Result<save::SaveData, ResponseError> {
-        self.request("getSaveData", None).await.map(|r| serde_json::from_value::<save::SaveData>(r.unwrap()).unwrap())
+        self.request("getSaveData", None)
+            .await
+            .map(|r| serde_json::from_value::<save::SaveData>(r.unwrap()).unwrap())
     }
 
     /// Clears a player's bricks by their name.
     pub fn clear_bricks(&self, target: impl Into<String>, quiet: bool) {
-        self.write_notification("clearBricks", Some(json!({"target": target.into(), "quiet": quiet})));
+        self.write_notification(
+            "clearBricks",
+            Some(json!({"target": target.into(), "quiet": quiet})),
+        );
     }
 
     /// Clear all bricks.
     pub fn clear_all_bricks(&self, quiet: bool) {
-        self.write_notification("clearAllBricks", Some(json!({"quiet": quiet})));
+        self.write_notification("clearAllBricks", Some(json!({ "quiet": quiet })));
     }
 
     /// Save bricks to a named save.
     pub async fn save_bricks(&self, name: impl Into<String>) -> Result<(), ResponseError> {
-        self.request("saveBricks", Some(Value::String(name.into()))).await.map(|_| ())
+        self.request("saveBricks", Some(Value::String(name.into())))
+            .await
+            .map(|_| ())
     }
 
     /// Load a save, provided an offset in the world.
-    pub async fn load_bricks(&self, name: impl Into<String>, quiet: bool, offset: (i32, i32, i32)) -> Result<(), ResponseError> {
+    pub async fn load_bricks(
+        &self,
+        name: impl Into<String>,
+        quiet: bool,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
         self.request("loadBricks", Some(json!({"name": name.into(), "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
     /// Reads a save (from a save file), and returns its data.
     #[cfg(not(feature = "brs"))]
-    pub async fn read_save_data(&self, name: impl Into<String>) -> Result<Option<Value>, ResponseError> {
-        self.request("readSaveData", Some(Value::String(name.into()))).await
+    pub async fn read_save_data(
+        &self,
+        name: impl Into<String>,
+    ) -> Result<Option<Value>, ResponseError> {
+        self.request("readSaveData", Some(Value::String(name.into())))
+            .await
     }
 
     /// Reads a save (from a save file), and returns its data as a brickadia-rs save object.
     #[cfg(feature = "brs")]
-    pub async fn read_save_data(&self, name: impl Into<String>) -> Result<Option<save::SaveData>, ResponseError> {
-        self.request("readSaveData", Some(Value::String(name.into()))).await.map(|r| match r {
-            Some(r) => serde_json::from_value::<save::SaveData>(r).ok(),
-            None => None,
-        })
+    pub async fn read_save_data(
+        &self,
+        name: impl Into<String>,
+    ) -> Result<Option<save::SaveData>, ResponseError> {
+        self.request("readSaveData", Some(Value::String(name.into())))
+            .await
+            .map(|r| match r {
+                Some(r) => serde_json::from_value::<save::SaveData>(r).ok(),
+                None => None,
+            })
     }
 
     /// Loads a save (from a JSON value) into the world, provided an offset.
     #[cfg(not(feature = "brs"))]
-    pub async fn load_save_data(&self, data: Value, quiet: bool, offset: (i32, i32, i32)) -> Result<(), ResponseError> {
+    pub async fn load_save_data(
+        &self,
+        data: Value,
+        quiet: bool,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
         self.request("loadSaveData", Some(json!({"data": data, "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
     /// Loads a save (from brickadia-rs save data) into the world, provided an offset.
     #[cfg(feature = "brs")]
-    pub async fn load_save_data(&self, data: save::SaveData, quiet: bool, offset: (i32, i32, i32)) -> Result<(), ResponseError> {
+    pub async fn load_save_data(
+        &self,
+        data: save::SaveData,
+        quiet: bool,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
         self.request("loadSaveData", Some(json!({"data": data, "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
     /// Changes the map.
     pub async fn change_map(&self, map: impl Into<String>) -> Result<(), ResponseError> {
-        self.request("changeMap", Some(Value::String(map.into()))).await.map(|_| ())
+        self.request("changeMap", Some(Value::String(map.into())))
+            .await
+            .map(|_| ())
     }
 }
 
