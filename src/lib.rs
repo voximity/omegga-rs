@@ -12,7 +12,7 @@ use std::{
 use brickadia::save;
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use resources::Player;
+use resources::{GhostBrick, Player, PlayerPaint, TemplateBounds};
 use serde_json::{json, Value};
 use thiserror::Error;
 use tokio::{
@@ -252,19 +252,6 @@ impl Omegga {
         })
     }
 
-    /// Get a player's position.
-    pub async fn get_player_position(
-        &self,
-        target: impl Into<String>,
-    ) -> Result<Option<(f64, f64, f64)>, ResponseError> {
-        self.request("getPlayerPosition", Some(Value::String(target.into())))
-            .await
-            .map(|r| match r {
-                Some(r) => serde_json::from_value::<(f64, f64, f64)>(r).ok(),
-                None => None,
-            })
-    }
-
     /// Get all player positions.
     pub async fn get_all_player_positions(&self) -> Result<Vec<PlayerPosition>, ResponseError> {
         self.request("getAllPlayerPositions", None)
@@ -403,6 +390,129 @@ impl Omegga {
     /// Changes the map.
     pub async fn change_map(&self, map: impl Into<String>) -> Result<(), ResponseError> {
         self.request("changeMap", Some(Value::String(map.into())))
+            .await
+            .map(|_| ())
+    }
+
+    /// Get a player's permissions.
+    pub async fn get_player_permissions(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Value, ResponseError> {
+        self.request("player.getPermissions", Some(Value::String(target.into())))
+            .await
+            .map(|r| r.unwrap_or(Value::Null))
+    }
+
+    /// Get a player's name color (6-digit hexadecimal).
+    pub async fn get_player_name_color(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<String>, ResponseError> {
+        self.request("player.getNameColor", Some(Value::String(target.into())))
+            .await
+            .map(|r| r.and_then(|r| serde_json::from_value::<_>(r).ok()))
+    }
+
+    /// Get a player's position.
+    pub async fn get_player_position(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<(f64, f64, f64)>, ResponseError> {
+        self.request("player.getPosition", Some(Value::String(target.into())))
+            .await
+            .map(|r| match r {
+                Some(r) => serde_json::from_value::<(f64, f64, f64)>(r).ok(),
+                None => None,
+            })
+    }
+
+    /// Get a player's ghost brick data.
+    pub async fn get_player_ghost_brick(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<GhostBrick>, ResponseError> {
+        self.request("player.getGhostBrick", Some(Value::String(target.into())))
+            .await
+            .map(|r| r.and_then(|r| serde_json::from_value::<_>(r).ok()))
+    }
+
+    /// Get a player's paint data.
+    pub async fn get_player_paint(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<PlayerPaint>, ResponseError> {
+        self.request("player.getPaint", Some(Value::String(target.into())))
+            .await
+            .map(|r| r.and_then(|r| serde_json::from_value::<_>(r).ok()))
+    }
+
+    /// Get a player's template bounds.
+    pub async fn get_player_template_bounds(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<TemplateBounds>, ResponseError> {
+        self.request(
+            "player.getTemplateBounds",
+            Some(Value::String(target.into())),
+        )
+        .await
+        .map(|r| r.and_then(|r| serde_json::from_value::<_>(r).ok()))
+    }
+
+    /// Get a player's template data.
+    #[cfg(not(feature = "brs"))]
+    pub async fn get_player_template_bounds_data(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<Value>, ResponseError> {
+        self.request(
+            "player.getTemplateBoundsData",
+            Some(Value::String(target.into())),
+        )
+        .await
+    }
+
+    /// Get a player's template data as a brickadia-rs save object.
+    #[cfg(feature = "brs")]
+    pub async fn get_player_template_bounds_data(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<save::SaveData>, ResponseError> {
+        self.request(
+            "player.getTemplateBoundsData",
+            Some(Value::String(target.into())),
+        )
+        .await
+        .map(|r| r.and_then(|r| serde_json::from_value::<_>(r).ok()))
+    }
+
+    /// Load save data at a player's template.
+    #[cfg(not(feature = "brs"))]
+    pub async fn load_data_at_ghost_brick(
+        &self,
+        target: impl Into<String>,
+        data: Value,
+        offset: (i32, i32, i32),
+        rotate: bool,
+        quiet: bool,
+    ) -> Result<(), ResponseError> {
+        self.request("player.loadDataAtGhostBrick", Some(json!({"target": target.into(), "data": data, "offX": offset.0, "offY": offset.1, "offZ": offset.2, "rotate": rotate, "quiet": quiet})))
+            .await
+            .map(|_| ())
+    }
+
+    /// Load brickadia-rs save data at a player's template.
+    #[cfg(feature = "brs")]
+    pub async fn load_data_at_ghost_brick(
+        &self,
+        target: impl Into<String>,
+        data: save::SaveData,
+        offset: (i32, i32, i32),
+        rotate: bool,
+        quiet: bool,
+    ) -> Result<(), ResponseError> {
+        self.request("player.loadDataAtGhostBrick", Some(json!({"target": target.into(), "data": data, "offX": offset.0, "offY": offset.1, "offZ": offset.2, "rotate": rotate, "quiet": quiet})))
             .await
             .map(|_| ())
     }
