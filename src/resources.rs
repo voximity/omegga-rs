@@ -22,16 +22,16 @@ pub struct GhostBrick {
     #[serde(rename = "targetGrid")]
     pub target_grid: String,
     pub location: (f64, f64, f64),
-    pub orientation: u8,
+    pub orientation: String,
 }
 
 /// Player paint data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerPaint {
     #[serde(rename = "materialIndex")]
-    pub material_index: u32,
+    pub material_index: String,
     #[serde(rename = "materialAlpha")]
-    pub material_alpha: u32,
+    pub material_alpha: String,
     #[serde(rename = "material")]
     pub material: String,
     #[serde(rename = "color")]
