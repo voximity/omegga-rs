@@ -394,6 +394,16 @@ impl Omegga {
             .map(|_| ())
     }
 
+    /// Get a player's roles.
+    pub async fn get_player_roles(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<Vec<String>>, ResponseError> {
+        self.request("player.getRoles", Some(Value::String(target.into())))
+            .await
+            .map(|r| serde_json::from_value::<Vec<String>>(r.unwrap_or(Value::Null)).ok())
+    }
+
     /// Get a player's permissions.
     pub async fn get_player_permissions(
         &self,
