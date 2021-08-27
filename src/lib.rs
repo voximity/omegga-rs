@@ -196,26 +196,18 @@ impl Omegga {
     }
 
     /// Sets an object in the store.
-    pub async fn store_set(
-        &self,
-        key: impl Into<String>,
-        value: Value,
-    ) -> Result<(), ResponseError> {
-        self.request("store.set", Some(json!([key.into(), value])))
-            .await
-            .map(|_| ())
+    pub fn store_set(&self, key: impl Into<String>, value: Value) {
+        self.write_notification("store.set", Some(json!([key.into(), value])))
     }
 
     /// Deletes an object from the store.
-    pub async fn store_delete(&self, key: impl Into<String>) -> Result<(), ResponseError> {
-        self.request("store.delete", Some(Value::String(key.into())))
-            .await
-            .map(|_| ())
+    pub async fn store_delete(&self, key: impl Into<String>) {
+        self.write_notification("store.delete", Some(Value::String(key.into())))
     }
 
     /// Wipes the store.
-    pub async fn store_wipe(&self) -> Result<(), ResponseError> {
-        self.request("store.wipe", None).await.map(|_| ())
+    pub fn store_wipe(&self) {
+        self.write_notification("store.wipe", None)
     }
 
     /// Gets a list of keys in the store.
