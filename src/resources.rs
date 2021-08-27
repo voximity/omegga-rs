@@ -7,6 +7,7 @@ pub struct Player {
     pub id: String,
     pub controller: String,
     pub state: String,
+    pub host: Option<bool>,
 }
 
 /// A player position, which composes a `Player` and their position (a `(f64, f64, f64)`).
