@@ -394,6 +394,16 @@ impl Omegga {
             .map(|_| ())
     }
 
+    /// Get a player.
+    pub async fn get_player(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<Player>, ResponseError> {
+        self.request("player.get", Some(Value::String(target.into())))
+            .await
+            .map(|r| serde_json::from_value::<Player>(r.unwrap_or(Value::Null)).ok())
+    }
+
     /// Get a player's roles.
     pub async fn get_player_roles(
         &self,
