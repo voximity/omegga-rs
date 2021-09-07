@@ -542,8 +542,8 @@ impl Omegga {
     /// Emit a custom event to a plugin.
     pub async fn emit_plugin<T>(
         &self,
-        target: impl Into<String>,
-        event: impl Into<String>,
+        target: String,
+        event: String,
         args: Vec<Value>,
     ) -> Result<Option<T>, ResponseError>
     where

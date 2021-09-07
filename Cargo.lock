@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "omegga"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "brickadia",
  "dashmap",
