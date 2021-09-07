@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// A player.
@@ -47,4 +49,44 @@ pub struct TemplateBounds {
     #[serde(rename = "maxBound")]
     pub max_bound: (f64, f64, f64),
     pub center: (f64, f64, f64),
+}
+
+/// A plugin.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Plugin {
+    pub name: String,
+    pub description: String,
+    pub author: String,
+    pub config: HashMap<String, ConfigEntry>,
+    pub commands: Vec<Command>,
+}
+
+/// A config entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigEntry {
+    pub description: String,
+    #[serde(rename = "type")]
+    pub entry_type: String,
+    #[serde(rename = "itemType")]
+    pub item_type: Option<String>,
+    #[serde(default)]
+    pub default: serde_json::Value,
+}
+
+/// A config command.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Command {
+    pub name: String,
+    pub description: String,
+    pub example: String,
+    pub args: Vec<CommandArg>,
+}
+
+/// A config command arg.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandArg {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub required: bool,
 }

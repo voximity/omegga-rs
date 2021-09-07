@@ -12,7 +12,7 @@ use std::{
 use brickadia::save;
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use resources::{GhostBrick, Player, PlayerPaint, TemplateBounds};
+use resources::{GhostBrick, Player, PlayerPaint, Plugin, TemplateBounds};
 use serde_json::{json, Value};
 use thiserror::Error;
 use tokio::{
@@ -527,6 +527,38 @@ impl Omegga {
         self.request("player.loadDataAtGhostBrick", Some(json!({"target": target.into(), "data": data, "offX": offset.0, "offY": offset.1, "offZ": offset.2, "rotate": rotate, "quiet": quiet})))
             .await
             .map(|_| ())
+    }
+
+    /// Get a plugin.
+    pub async fn get_plugin(
+        &self,
+        target: impl Into<String>,
+    ) -> Result<Option<Plugin>, ResponseError> {
+        self.request("plugin.get", Some(Value::String(target.into())))
+            .await
+            .map(|r| r.and_then(|r| serde_json::from_value::<_>(r).ok()))
+    }
+
+    /// Emit a custom event to a plugin.
+    pub async fn emit_plugin<T>(
+        &self,
+        target: impl Into<String>,
+        event: impl Into<String>,
+        args: Vec<Value>,
+    ) -> Result<Option<T>, ResponseError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let mut query = vec![Value::String(target.into()), Value::String(event.into())];
+        query.extend(args.into_iter());
+
+        self.request("plugin.emit", Some(Value::Array(query)))
+            .await
+            .map(|r| {
+                serde_json::from_value::<_>(r.unwrap_or_default())
+                    .ok()
+                    .unwrap_or_default()
+            })
     }
 }
 
