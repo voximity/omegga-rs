@@ -1,6 +1,6 @@
 # omegga-rs
 
-Experimental RPC interface library for Rust.
+Omegga RPC interface library for Rust.
 
 ## Usage
 
@@ -8,7 +8,7 @@ To enable support for serializing/deserializing into [brickadia-rs](https://gith
 save objects, use the optional feature `brs`:
 
 ```toml
-brickadia = { version = "0.2", features = "brs" }
+omegga = { version = "0.3", features = "brs" }
 ```
 
 The following is a sample plugin:
@@ -43,7 +43,9 @@ async fn main() {
 }
 ```
 
-It is recommended to check the [Omegga RPC reference](https://github.com/brickadia-community/omegga#json-rpc-plugins) as this library provides little abstraction.
+*TODO: Update for 0.3*
+
+It is recommended to check the [Omegga RPC reference](https://github.com/brickadia-community/omegga#json-rpc-plugins).
 
 ## Credits
 

@@ -12,6 +12,7 @@ use std::{
 use brickadia::save;
 
 use dashmap::{mapref::entry::Entry, DashMap};
+use events::Event;
 use resources::{GhostBrick, Player, PlayerPaint, Plugin, TemplateBounds};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -25,10 +26,11 @@ use tokio::{
 
 use crate::resources::PlayerPosition;
 
+pub mod events;
 pub mod resources;
 pub mod rpc;
 
-pub type RpcEventReceiver = UnboundedReceiver<rpc::Message>;
+pub type EventReceiver = UnboundedReceiver<Event>;
 
 /// A future that waits for the server to respond, returning a [`Response`](crate::Response).
 /// This will await indefinitely, so use with Tokio's `select!` macro to impose a timeout.
@@ -79,8 +81,8 @@ impl Omegga {
     }
 
     /// Spawn the listener.
-    pub fn spawn(&self) -> RpcEventReceiver {
-        let (tx, rx) = mpsc::unbounded_channel::<rpc::Message>();
+    pub fn spawn(&self) -> EventReceiver {
+        let (tx, rx) = mpsc::unbounded_channel::<Event>();
         let awaiter_txs = Arc::clone(&self.awaiter_txs);
         tokio::spawn(async move {
             let reader = BufReader::new(stdin());
@@ -101,10 +103,161 @@ impl Omegga {
                             let _ = sender.send(rpc::Response { id, result, error });
                         }
                     }
-                    // Otherwise, send everything else
-                    _ => {
-                        let _ = tx.send(message);
-                    }
+                    // Handle requests
+                    rpc::Message::Request {
+                        id, method, params, ..
+                    } => match method.as_str() {
+                        "init" => {
+                            let _ = tx.send(Event::Init {
+                                id,
+                                config: params.unwrap_or(Value::Null),
+                            });
+                        }
+                        "stop" => {
+                            let _ = tx.send(Event::Stop { id });
+                        }
+                        "plugin_emit" => match params {
+                            Some(Value::Array(v)) => {
+                                let mut params = v.into_iter();
+                                let event = match params.next().unwrap() {
+                                    Value::String(s) => s,
+                                    _ => continue,
+                                };
+                                let from = match params.next().unwrap() {
+                                    Value::String(s) => s,
+                                    _ => continue,
+                                };
+
+                                let _ = tx.send(Event::PluginEmit {
+                                    id,
+                                    event,
+                                    from,
+                                    args: params.collect(),
+                                });
+                            }
+                            _ => (),
+                        },
+                        _ => (),
+                    },
+                    // Handle notifications
+                    rpc::Message::Notification { method, params, .. } => match method.as_str() {
+                        "bootstrap" => {
+                            let _ = tx.send(Event::Bootstrap {
+                                omegga: params.unwrap_or(Value::Null),
+                            });
+                        }
+                        "plugin:players:raw" => {
+                            let _ = tx.send(Event::PluginPlayersRaw {
+                                players: serde_json::from_value(params.unwrap())
+                                    .unwrap_or_default(),
+                            });
+                        }
+                        "line" => {
+                            let _ = tx.send(Event::Line(
+                                serde_json::from_value::<Vec<String>>(params.unwrap())
+                                    .unwrap()
+                                    .into_iter()
+                                    .next()
+                                    .unwrap(),
+                            ));
+                        }
+                        "start" => {
+                            #[derive(serde::Deserialize)]
+                            struct MapParams {
+                                map: String,
+                            }
+
+                            let _ = tx.send(Event::Start {
+                                map: serde_json::from_value::<MapParams>(params.unwrap())
+                                    .unwrap()
+                                    .map,
+                            });
+                        }
+                        "host" => {
+                            #[derive(serde::Deserialize)]
+                            struct HostParams {
+                                name: String,
+                                id: String,
+                            }
+                            
+                            let host =
+                                serde_json::from_value::<HostParams>(params.unwrap()).unwrap();
+
+                            let _ = tx.send(Event::Host {
+                                name: host.name,
+                                id: host.id,
+                            });
+                        }
+                        "version" => {
+                            let _ = tx.send(Event::Version(
+                                serde_json::from_value::<Vec<String>>(params.unwrap())
+                                    .unwrap()
+                                    .into_iter()
+                                    .next()
+                                    .unwrap(),
+                            ));
+                        }
+                        "unauthorized" => {
+                            let _ = tx.send(Event::Unauthorized);
+                        }
+                        "join" => {
+                            let _ = tx.send(Event::Join(
+                                serde_json::from_value(params.unwrap()).unwrap(),
+                            ));
+                        }
+                        "leave" => {
+                            let _ = tx.send(Event::Leave(
+                                serde_json::from_value(params.unwrap()).unwrap(),
+                            ));
+                        }
+                        e if e.starts_with("cmd:") => {
+                            let c = &e[4..];
+                            let mut params = serde_json::from_value::<Vec<String>>(params.unwrap())
+                                .unwrap()
+                                .into_iter();
+
+                            let _ = tx.send(Event::Command {
+                                player: params.next().unwrap(),
+                                command: c.to_string(),
+                                args: params.collect(),
+                            });
+                        }
+                        e if e.starts_with("chatcmd:") => {
+                            let c = &e[8..];
+                            let mut params = serde_json::from_value::<Vec<String>>(params.unwrap())
+                                .unwrap()
+                                .into_iter();
+
+                            let _ = tx.send(Event::ChatCommand {
+                                player: params.next().unwrap(),
+                                command: c.to_string(),
+                                args: params.collect(),
+                            });
+                        }
+                        "chat" => {
+                            let mut params = serde_json::from_value::<Vec<String>>(params.unwrap())
+                                .unwrap()
+                                .into_iter();
+
+                            let _ = tx.send(Event::Chat {
+                                player: params.next().unwrap(),
+                                message: params.next().unwrap(),
+                            });
+                        }
+                        "mapchange" => {
+                            #[derive(serde::Deserialize)]
+                            struct MapParams {
+                                map: String,
+                            }
+
+                            let _ = tx.send(Event::MapChange(
+                                serde_json::from_value::<MapParams>(params.unwrap())
+                                    .unwrap()
+                                    .map,
+                            ));
+                        }
+                        _ => (),
+                    },
                 };
             }
         });
