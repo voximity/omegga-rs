@@ -168,7 +168,10 @@ impl Omegga {
                             }
 
                             let _ = tx.send(Event::Start {
-                                map: serde_json::from_value::<MapParams>(params.unwrap())
+                                map: serde_json::from_value::<Vec<MapParams>>(params.unwrap())
+                                    .unwrap()
+                                    .into_iter()
+                                    .next()
                                     .unwrap()
                                     .map,
                             });
@@ -179,9 +182,12 @@ impl Omegga {
                                 name: String,
                                 id: String,
                             }
-                            
-                            let host =
-                                serde_json::from_value::<HostParams>(params.unwrap()).unwrap();
+
+                            let host = serde_json::from_value::<Vec<HostParams>>(params.unwrap())
+                                .unwrap()
+                                .into_iter()
+                                .next()
+                                .unwrap();
 
                             let _ = tx.send(Event::Host {
                                 name: host.name,
@@ -202,12 +208,20 @@ impl Omegga {
                         }
                         "join" => {
                             let _ = tx.send(Event::Join(
-                                serde_json::from_value(params.unwrap()).unwrap(),
+                                serde_json::from_value::<Vec<_>>(params.unwrap())
+                                    .unwrap()
+                                    .into_iter()
+                                    .next()
+                                    .unwrap(),
                             ));
                         }
                         "leave" => {
                             let _ = tx.send(Event::Leave(
-                                serde_json::from_value(params.unwrap()).unwrap(),
+                                serde_json::from_value::<Vec<_>>(params.unwrap())
+                                    .unwrap()
+                                    .into_iter()
+                                    .next()
+                                    .unwrap(),
                             ));
                         }
                         e if e.starts_with("cmd:") => {
@@ -251,7 +265,10 @@ impl Omegga {
                             }
 
                             let _ = tx.send(Event::MapChange(
-                                serde_json::from_value::<MapParams>(params.unwrap())
+                                serde_json::from_value::<Vec<MapParams>>(params.unwrap())
+                                    .unwrap()
+                                    .into_iter()
+                                    .next()
                                     .unwrap()
                                     .map,
                             ));
