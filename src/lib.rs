@@ -116,7 +116,7 @@ impl Omegga {
                         "stop" => {
                             let _ = tx.send(Event::Stop { id });
                         }
-                        "plugin_emit" => match params {
+                        "plugin:emit" => match params {
                             Some(Value::Array(v)) => {
                                 let mut params = v.into_iter();
                                 let event = match params.next().unwrap() {
