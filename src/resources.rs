@@ -2,6 +2,55 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+macro_rules! color_def {
+    ($n:ident, $c:literal) => {
+        fn $n(self) -> Self {
+            self.color($c)
+        }
+    }
+}
+
+pub trait Colorize: Sized {
+    fn bold(self) -> Self;
+    fn italics(self) -> Self;
+    fn color(self, code: &str) -> Self;
+    fn hyperlink(self, link: &str) -> Self;
+    fn size(self, size: i32) -> Self;
+
+    color_def!(red, "f00");
+    color_def!(green, "0f0");
+    color_def!(blue, "00f");
+    color_def!(yellow, "ff0");
+    color_def!(teal, "0ff");
+    color_def!(magenta, "f0f");
+    color_def!(white, "fff");
+    color_def!(black, "000");
+    color_def!(dark_gray, "666");
+    color_def!(light_gray, "bbb");
+}
+
+impl Colorize for String {
+    fn bold(self) -> Self {
+        format!("**{}**", self)
+    }
+
+    fn italics(self) -> Self {
+        format!("*{}*", self)
+    }
+
+    fn color(self, code: &str) -> Self {
+        format!("<color=\"{}\">{}</>", code, self)
+    }
+
+    fn hyperlink(self, link: &str) -> Self {
+        format!("[{}]({})", self, link)
+    }
+
+    fn size(self, size: i32) -> Self {
+        format!("<size=\"{}\">{}</>", self, size)
+    }
+}
+
 /// A player.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
