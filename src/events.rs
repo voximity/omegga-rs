@@ -31,7 +31,7 @@ pub enum Event {
         name: String,
         id: String,
     },
-    Version(String),
+    Version(Value),
     Unauthorized,
     Join(Player),
     Leave(Player),

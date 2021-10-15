@@ -195,13 +195,7 @@ impl Omegga {
                             });
                         }
                         "version" => {
-                            let _ = tx.send(Event::Version(
-                                serde_json::from_value::<Vec<String>>(params.unwrap())
-                                    .unwrap()
-                                    .into_iter()
-                                    .next()
-                                    .unwrap(),
-                            ));
+                            let _ = tx.send(Event::Version(params.unwrap()));
                         }
                         "unauthorized" => {
                             let _ = tx.send(Event::Unauthorized);
