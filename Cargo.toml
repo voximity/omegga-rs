@@ -1,7 +1,7 @@
 [package]
 name = "omegga"
-version = "0.3.3"
-edition = "2018"
+version = "1.0.0"
+edition = "2021"
 description = "Experimental RPC interface for Omegga"
 license = "ISC"
 

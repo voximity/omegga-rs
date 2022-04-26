@@ -1,19 +1,3 @@
-# omegga-rs
-
-Omegga RPC interface library for Rust.
-
-## Usage
-
-To enable support for serializing/deserializing into [brickadia-rs](https://github.com/brickadia-community/brickadia-rs)
-save objects, use the optional feature `brs`:
-
-```toml
-omegga = { version = "1.0", features = "brs" }
-```
-
-The following is a sample plugin:
-
-```rs
 use omegga::{events::Event, Omegga};
 
 #[tokio::main]
@@ -42,11 +26,3 @@ async fn main() {
         }
     }
 }
-```
-
-It is recommended to check the [Omegga RPC reference](https://github.com/brickadia-community/omegga#json-rpc-plugins).
-
-## Credits
-
-* voximity - creator, maintainer
-* Meshiest - Omegga
