@@ -328,6 +328,11 @@ impl Omegga {
         ResponseAwaiter(rx)
     }
 
+    /// Register commands with Omegga. Call when the plugin is initialized.
+    pub fn register_commands(&self, id: rpc::RequestId, commands: &[&str]) {
+        self.write_response(id, Some(json!({ "registeredCommands": commands })), None);
+    }
+
     /// Prints a message to the Omegga console.
     pub fn log(&self, line: impl Into<String>) {
         self.write_notification("log", Some(Value::String(line.into())));

@@ -50,4 +50,16 @@ pub enum Event {
         message: String,
     },
     MapChange(String),
+    Interact {
+        brick_asset: String,
+        player: Player,
+        position: (f64, f64, f64),
+        data: Option<Value>,
+    },
+    Event {
+        name: String,
+        player: Player,
+        args: Vec<String>,
+    },
+    Autorestart(Value),
 }
