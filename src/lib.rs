@@ -12,7 +12,7 @@ use std::{
 use brickadia::save;
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use events::Event;
+use events::{BrickInteraction, Event};
 use resources::{GhostBrick, Player, PlayerPaint, Plugin, TemplateBounds};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -267,6 +267,36 @@ impl Omegga {
                                     .map,
                             ));
                         }
+                        "interact" => {
+                            let _ = tx.send(Event::Interact(
+                                serde_json::from_value::<BrickInteraction>(params.unwrap())
+                                    .unwrap(),
+                            ));
+                        }
+                        e if e.starts_with("event:") => {
+                            let e = &e[6..];
+                            match params {
+                                Some(Value::Array(params)) => {
+                                    let mut params = params.into_iter();
+                                    let player =
+                                        serde_json::from_value::<Player>(params.next().unwrap())
+                                            .unwrap();
+                                    let args = params
+                                        .map(|a| String::from(a.as_str().unwrap()))
+                                        .collect::<Vec<_>>();
+
+                                    let _ = tx.send(Event::Event {
+                                        name: String::from(e),
+                                        player,
+                                        args,
+                                    });
+                                }
+                                _ => continue,
+                            }
+                        }
+                        "autorestart" => {
+                            let _ = tx.send(Event::Autorestart(params.unwrap_or_default()));
+                        }
                         _ => (),
                     },
                 };
@@ -326,6 +356,11 @@ impl Omegga {
 
         // return back with an awaiter to await the receiver
         ResponseAwaiter(rx)
+    }
+
+    /// Register commands with Omegga. Call when the plugin is initialized.
+    pub fn register_commands(&self, id: rpc::RequestId, commands: &[&str]) {
+        self.write_response(id, Some(json!({ "registeredCommands": commands })), None);
     }
 
     /// Prints a message to the Omegga console.
@@ -396,6 +431,13 @@ impl Omegga {
     pub fn whisper(&self, username: impl Into<String>, line: impl Into<String>) {
         self.write_notification(
             "whisper",
+            Some(json!({"target": username.into(), "line": line.into()})),
+        );
+    }
+
+    pub fn middle_print(&self, username: impl Into<String>, line: impl Into<String>) {
+        self.write_notification(
+            "middlePrint",
             Some(json!({"target": username.into(), "line": line.into()})),
         );
     }
@@ -497,6 +539,16 @@ impl Omegga {
         self.request("loadBricks", Some(json!({"name": name.into(), "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
+    /// Load a save onto a player's clipboard.
+    pub async fn load_bricks_on_player(
+        &self,
+        name: impl Into<String>,
+        player: impl Into<String>,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
+        self.request("loadBricksOnPlayer", Some(json!({"name": name.into(), "player": player.into(), "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
+    }
+
     /// Reads a save (from a save file), and returns its data.
     #[cfg(not(feature = "brs"))]
     pub async fn read_save_data(
@@ -541,6 +593,28 @@ impl Omegga {
         offset: (i32, i32, i32),
     ) -> Result<(), ResponseError> {
         self.request("loadSaveData", Some(json!({"data": data, "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
+    }
+
+    /// Loads a save (from a JSON value) onto a player's clipboard.
+    #[cfg(not(feature = "brs"))]
+    pub async fn load_save_data_on_player(
+        &self,
+        data: Value,
+        player: impl Into<String>,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
+        self.request("loadSaveDataOnPlayer", Some(json!({"data": data, "player": player.into(), "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
+    }
+
+    /// Loads a save (from brickadia-rs save data) onto a player's clipboard.
+    #[cfg(feature = "brs")]
+    pub async fn load_save_data_on_player(
+        &self,
+        data: save::SaveData,
+        player: impl Into<String>,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
+        self.request("loadSaveDataOnPlayer", Some(json!({"data": data, "player": player.into(), "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
     /// Changes the map.
