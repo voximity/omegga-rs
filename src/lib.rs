@@ -435,6 +435,13 @@ impl Omegga {
         );
     }
 
+    pub fn middle_print(&self, username: impl Into<String>, line: impl Into<String>) {
+        self.write_notification(
+            "middlePrint",
+            Some(json!({"target": username.into(), "line": line.into()})),
+        );
+    }
+
     /// Gets a list of all players.
     pub async fn get_players(&self) -> Result<Vec<Player>, ResponseError> {
         self.request("getPlayers", None).await.map(|r| match r {
@@ -532,6 +539,16 @@ impl Omegga {
         self.request("loadBricks", Some(json!({"name": name.into(), "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
+    /// Load a save onto a player's clipboard.
+    pub async fn load_bricks_on_player(
+        &self,
+        name: impl Into<String>,
+        player: impl Into<String>,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
+        self.request("loadBricksOnPlayer", Some(json!({"name": name.into(), "player": player.into(), "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
+    }
+
     /// Reads a save (from a save file), and returns its data.
     #[cfg(not(feature = "brs"))]
     pub async fn read_save_data(
@@ -576,6 +593,28 @@ impl Omegga {
         offset: (i32, i32, i32),
     ) -> Result<(), ResponseError> {
         self.request("loadSaveData", Some(json!({"data": data, "quiet": quiet, "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
+    }
+
+    /// Loads a save (from a JSON value) onto a player's clipboard.
+    #[cfg(not(feature = "brs"))]
+    pub async fn load_save_data_on_player(
+        &self,
+        data: Value,
+        player: impl Into<String>,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
+        self.request("loadSaveDataOnPlayer", Some(json!({"data": data, "player": player.into(), "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
+    }
+
+    /// Loads a save (from brickadia-rs save data) onto a player's clipboard.
+    #[cfg(feature = "brs")]
+    pub async fn load_save_data_on_player(
+        &self,
+        data: save::SaveData,
+        player: impl Into<String>,
+        offset: (i32, i32, i32),
+    ) -> Result<(), ResponseError> {
+        self.request("loadSaveDataOnPlayer", Some(json!({"data": data, "player": player.into(), "offX": offset.0, "offY": offset.1, "offZ": offset.2}))).await.map(|_| ())
     }
 
     /// Changes the map.
