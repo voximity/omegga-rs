@@ -50,16 +50,19 @@ pub enum Event {
         message: String,
     },
     MapChange(String),
-    Interact {
-        brick_asset: String,
-        player: Player,
-        position: (f64, f64, f64),
-        data: Option<Value>,
-    },
+    Interact(BrickInteraction),
     Event {
         name: String,
         player: Player,
         args: Vec<String>,
     },
     Autorestart(Value),
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrickInteraction {
+    pub brick_asset: String,
+    pub player: Player,
+    pub position: (f64, f64, f64),
+    pub data: Option<Value>,
 }

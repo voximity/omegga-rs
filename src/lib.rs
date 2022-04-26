@@ -12,7 +12,7 @@ use std::{
 use brickadia::save;
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use events::Event;
+use events::{BrickInteraction, Event};
 use resources::{GhostBrick, Player, PlayerPaint, Plugin, TemplateBounds};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -266,6 +266,36 @@ impl Omegga {
                                     .unwrap()
                                     .map,
                             ));
+                        }
+                        "interact" => {
+                            let _ = tx.send(Event::Interact(
+                                serde_json::from_value::<BrickInteraction>(params.unwrap())
+                                    .unwrap(),
+                            ));
+                        }
+                        e if e.starts_with("event:") => {
+                            let e = &e[6..];
+                            match params {
+                                Some(Value::Array(params)) => {
+                                    let mut params = params.into_iter();
+                                    let player =
+                                        serde_json::from_value::<Player>(params.next().unwrap())
+                                            .unwrap();
+                                    let args = params
+                                        .map(|a| String::from(a.as_str().unwrap()))
+                                        .collect::<Vec<_>>();
+
+                                    let _ = tx.send(Event::Event {
+                                        name: String::from(e),
+                                        player,
+                                        args,
+                                    });
+                                }
+                                _ => continue,
+                            }
+                        }
+                        "autorestart" => {
+                            let _ = tx.send(Event::Autorestart(params.unwrap_or_default()));
                         }
                         _ => (),
                     },
