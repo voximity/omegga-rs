@@ -59,10 +59,23 @@ pub enum Event {
     Autorestart(Value),
 }
 
+/// A player from interact.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PlayerInteract {
+    pub name: String,
+    pub id: String,
+    pub controller: String,
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct BrickInteraction {
     pub brick_asset: String,
-    pub player: Player,
+    pub brick_name: String,
+    pub brick_size: Vec<u64>,
+    pub player: PlayerInteract,
     pub position: (f64, f64, f64),
     pub data: Option<Value>,
+    pub error: bool,
+    pub json: bool,
+    pub message: String
 }
