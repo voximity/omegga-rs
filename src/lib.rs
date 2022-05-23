@@ -268,10 +268,17 @@ impl Omegga {
                             ));
                         }
                         "interact" => {
-                            let _ = tx.send(Event::Interact(
-                                serde_json::from_value::<BrickInteraction>(params.unwrap())
-                                    .unwrap(),
-                            ));
+                            match params {
+                              Some(Value::Array(params)) => {
+                                  let mut params = params.into_iter();
+                                  let interact =
+                                      serde_json::from_value::<BrickInteraction>(params.next().unwrap())
+                                          .unwrap();
+
+                                  let _ = tx.send(Event::Interact(interact));
+                              }
+                              _ => continue,
+                            }
                         }
                         e if e.starts_with("event:") => {
                             let e = &e[6..];
